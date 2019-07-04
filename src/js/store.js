@@ -15,7 +15,10 @@ export default function () {
           url: '',
           singer: ''
         },
+      },
+      controls: {
         playState: false,
+        repeat: false,
       },
     },
     mutations: {
@@ -26,7 +29,10 @@ export default function () {
         state.song.current = Object.assign({}, state.song.current, data);
       },
       setSongPlayState(state, data) {
-        state.song.playState = data;
+        state.controls.playState = data;
+      },
+      setSongRepeatState(state, data) {
+        state.controls.repeat = data;
       }
     }
   });

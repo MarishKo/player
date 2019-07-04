@@ -17,6 +17,13 @@ module.exports = {
   module: {
     rules: [
       {
+        test: /\.svg$/,
+        loader: 'svg-sprite-loader',
+        options: {
+          symbolId: filePath => path.basename(filePath)
+        }
+      },
+      {
         test: /\.vue$/,
         use: {
           loader: 'vue-loader',

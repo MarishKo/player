@@ -2,19 +2,45 @@
   <div class="song">
     <div class="song__container">
       <div class="song__disk">
-        <svg class="song__svg" id="mySVG"></svg>
-        <div class="song__disk_bg" :class="{'-played': song.playState}">
+        <div class="song__svg" ref="svgContainer">
+          <svg id="mySVG"></svg>
+        </div>
+
+        <div class="song__disk_bg" :class="{'-played': controls.playState}">
           <img class="song__img" :src="song.current.bg" :alt="song.current.title">
         </div>
       </div>
 
+      <canvas id="song__canvas" class="song__canvas" width="400" height="80"></canvas>
+
       <div class="song__controls">
-        <button class="song__controls_btn song__controls_btn--next" type="button">next</button>
-        <button class="song__controls_btn song__controls_btn--prev" type="button">prev</button>
-        <button class="song__controls_btn song__controls_btn--list" type="button">list</button>
-        <button class="song__controls_btn song__controls_btn--play" :class="{'-played': song.playState}" type="button"
-                @click="playOrPauseSong">play/pause
-        </button>
+        <div class="song__controls_rivets">
+          <div class="song__controls_rivets_item song__controls_rivets_item--left"></div>
+          <div class="song__controls_rivets_item song__controls_rivets_item--top"></div>
+          <div class="song__controls_rivets_item song__controls_rivets_item--right"></div>
+          <div class="song__controls_rivets_item song__controls_rivets_item--bottom"></div>
+        </div>
+        <div class="song__controls--wrapp">
+          <button class="song__controls_btn song__controls_btn--prev" type="button">
+            <i class="fa fa-fast-backward"></i>
+          </button>
+          <button class="song__controls_btn song__controls_btn--next" type="button">
+            <i class="fa fa-fast-forward"></i>
+          </button>
+          <button class="song__controls_btn song__controls_btn--ab"
+                  type="button"
+                  :class="{'-active': controls.repeat}"
+                  @click="onClickRepeat">
+            <i class="fa fa-repeat"></i>
+          </button>
+          <button class="song__controls_btn song__controls_btn--play"
+                  :class="{'-active': controls.playState}"
+                  type="button"
+                  @click="playOrPauseSong">
+            <i v-if="controls.playState" class="fa fa-pause"></i>
+            <i v-else class="fa fa-play"></i>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -30,13 +56,28 @@
     data() {
       return {
         audio: new Audio(),
-        songTime: ''
+        drawVisual: null,
+        sourceNode: null,
+        songTime: '',
+        flags: {
+          one: {
+            left: 174,
+            top: -8,
+          },
+          two: {
+            left: 178,
+            top: -8,
+          }
+        }
       }
     },
     computed: {
       song() {
         return this.$store.state.song;
-      }
+      },
+      controls() {
+        return this.$store.state.controls;
+      },
     },
     methods: {
       setSVGParams() {
@@ -54,19 +95,83 @@
           this.$store.commit('setCurrentSong', {duration: audio.duration});
           this.createCircle();
         });
+
+
+      },
+      drawAudioProcess() {
+        this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        this.analyser = this.audioCtx.createAnalyser();
+
+        this.analyser.minDecibels = -90;
+        this.analyser.maxDecibels = -10;
+        this.analyser.smoothingTimeConstant = 0.85;
+        this.analyser.fftSize = 256;
+
+        this.jsNode = this.audioCtx.createScriptProcessor(1024, 1, 1);
+        this.sourceNode = this.audioCtx.createMediaElementSource(this.audio);
+        this.sourceNode.connect(this.analyser);
+        this.analyser.connect(this.jsNode);
+        this.jsNode.connect(this.audioCtx.destination);
+        this.sourceNode.connect(this.audioCtx.destination);
+        this.jsNode.onaudioprocess = function () {
+          drawAlt();
+        };
+
+        let bufferLengthAlt = this.analyser.frequencyBinCount,
+          dataArrayAlt = new Uint8Array(bufferLengthAlt),
+          canvas = document.getElementById('song__canvas'),
+          canvasCtx = canvas.getContext("2d");
+
+        canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+        let drawAlt = () => {
+          this.drawVisual = requestAnimationFrame(drawAlt);
+
+          this.analyser.getByteFrequencyData(dataArrayAlt);
+
+          canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+          canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+          let barWidth = (canvas.width / bufferLengthAlt) * 2.5,
+            barHeight,
+            x = 0;
+
+          for (let i = 0; i < bufferLengthAlt; i++) {
+            barHeight = dataArrayAlt[i];
+
+            let hue = i / this.analyser.frequencyBinCount * 360;
+            canvasCtx.fillStyle = 'hsl(' + hue + ', 100%, 50%)';
+            canvasCtx.fillRect(x, canvas.height - barHeight / 2, barWidth, barHeight / 2);
+
+            x += barWidth + 1;
+          }
+        };
       },
       playOrPauseSong() {
-        if (this.song.playState) {
+        if (this.controls.playState) {
           this.audio.pause();
+          this.stopAndClearSongProcessAnimation();
         } else {
           this.audio.play();
           this.audio.addEventListener('ended', this.onEndedMusic);
           this.createSVGCircle();
+          this.drawAudioProcess();
         }
-        this.$store.commit('setSongPlayState', !this.song.playState);
+        this.$store.commit('setSongPlayState', !this.controls.playState);
       },
       onEndedMusic() {
         this.$store.commit('setSongPlayState', false);
+        this.stopAndClearSongProcessAnimation();
+      },
+      stopAndClearSongProcessAnimation() {
+        if (this.drawVisual !== null) {
+          window.cancelAnimationFrame(this.drawVisual);
+        }
+        if (this.sourceNode !== null) {console.log(2);
+        console.log(this.audioCtx);
+          this.sourceNode.disconnect();
+          this.sourceNode = null;
+        }
       },
       /**
        * создание круга timeline песни
@@ -99,9 +204,9 @@
         myCircleFill.setAttribute('stroke-dashoffset', circleLength);
         myCircleFill.setAttribute('stroke-dasharray', circleLength + ',' + circleLength);
         document.getElementById("mySVG").appendChild(myCircleFill);
-        this.onClickTimeline(myCircleFill);
+        //this.onClickTimeline(myCircleFill);
         this.trackLine = myCircleFill;
-        requestAnimationFrame(() => this.getFill());
+        //requestAnimationFrame(() => this.getFill());
       },
       /**
        * заполнение круга progress-bar
@@ -158,18 +263,24 @@
            * @type {number}
            */
           let newTime = L * _this.audio.duration / circleLength;
-          if (this.song.playState) {
+          if (this.controls.playState) {
             this.audio.currentTime = newTime;
             this.audio.play();
           }
         });
       },
-    },
-    created() {
-      this.setAudioDuration();
+      onClickRepeat() {
+        if (this.controls.repeat) {
+
+        } else {
+
+        }
+        this.$store.commit('setSongRepeatState', !this.controls.repeat);
+      },
     },
     mounted() {
       this.setSVGParams();
+      this.setAudioDuration();
     }
   }
 </script>
@@ -185,11 +296,24 @@
       padding: 50px;
       display: inline-flex;
       justify-content: center;
-      align-items: flex-end;
+      align-items: center;
       box-sizing: border-box;
-      background: #613828;
+      background: #3c2400;
       margin: 50px;
       border-radius: 10px;
+      position: relative;
+      flex-direction: column;
+      &:after {
+        content: '';
+        position: absolute;
+        top: 20px;
+        bottom: 20px;
+        left: 20px;
+        right: 20px;
+        border: 2px solid #503704;
+        border-radius: 10px;
+        box-shadow: inset 1px 1px 8px 0 #000;;
+      }
     }
     &__disk {
       width: 364px;
@@ -205,25 +329,11 @@
         width: 98%;
         height: 98%;
         border-radius: 50%;
-        background-color: #222;
-        background: linear-gradient(#222, #222, #444, #222, #222);
+        background-color: #000;
+        background: linear-gradient(#000, #000, #333, #000000, #000);
         display: flex;
         align-items: center;
         justify-content: center;
-        &:after {
-          content: '';
-          width: 20px;
-          height: 20px;
-          left: 50%;
-          top: 50%;
-          position: absolute;
-          margin-left: -10px;
-          z-index: 1;
-          background: #222;
-          border-radius: 50%;
-          margin-top: -10px;
-          box-shadow: inset 0px 0px 6px 0px #ffffff;
-        }
         &.-played {
           animation: spinDisc 2s linear 0.3s infinite forwards;
         }
@@ -244,50 +354,128 @@
     }
     &__img {
       position: absolute;
-      max-width: 176px;
+      max-width: 140px;
       border-radius: 50%;
-      opacity: 0.3;
+      opacity: .8;
+      border: 20px solid #ffffff;
     }
     &__controls {
-      padding: 20px 10px;
-      border: 1px solid #ffffff;
-      border-radius: 5px;
+      padding: 20px;
       margin-top: 20px;
-      width: 364px;
-      text-align: center;
-      background: #5f536d;
-      display: flex;
-      justify-content: center;
+      position: relative;
+      &--wrapp {
+        width: 364px;
+        text-align: center;
+        background: #8f6002;
+        display: flex;
+        justify-content: center;
+        box-shadow: 4px 4px 0 #6d4601 inset;
+        border-left: 2px solid #906310;
+        border-top: 2px solid #906310;
+        padding: 20px 20px 15px;
+        position: relative;
+        border-radius: 10px;
+      }
+      &_rivets {
+        position: absolute;
+        background-color: #B1811D;
+        border-radius: 15px;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        box-shadow: 0px 0px 5px 0px rgba(0, 0, 0, 0.5);
+
+        &_item {
+          position: absolute;
+          top: 6px;
+          left: 8px;
+          background-color: #8f6002;
+          width: 16px;
+          border-radius: 50%;
+          height: 16px;
+          box-shadow: 1px 1px 0 #6d4601;
+          &--top {
+            left: auto;
+            right: 7px;
+          }
+          &--bottom {
+            top: auto;
+            bottom: 5px;
+          }
+          &--right {
+            left: auto;
+            top: auto;
+            right: 7px;
+            bottom: 5px;
+          }
+          &:after, &:before {
+            position: absolute;
+            content: '';
+            width: 1px;
+            height: 6px;
+            top: 5px;
+            left: 8px;
+            background-color: #482e00;
+          }
+          &:after {
+            transform: rotate(45deg);
+          }
+          &:before {
+            transform: rotate(-45deg);
+          }
+        }
+      }
       &_btn {
         width: 50px;
         height: 50px;
-        border: 1px solid #180f25;
-        border-radius: 5px;
+        border: 1px solid #6d4601;
+        border-radius: 50%;
         font-size: 8px;
         cursor: pointer;
         padding: 0;
-        margin: 0;
-        box-shadow: 0 2px 6px rgba(0, 0, 31, 0.75);
+        margin: 0 10px 0 0;
+        box-shadow: 0 2px 6px rgba(0, 0, 31, .75);
         position: relative;
         box-sizing: border-box;
-        margin-right: 10px;
-        color: #ffffff;
-        background: #180f25;
+        color: rgba(255, 255, 255, 0.5);
+        background: #6d4601;
         outline: none;
+        z-index: 1;
+        .fa {
+          transform: translate(0px, -8px);
+          transition: transform 0.6s ease;
+          font-size: 12px;
+          text-shadow: 1px 1px 8px black;
+        }
         &:after {
           content: "";
           position: absolute;
-          top: 0px;
+          top: 0;
           left: -1px;
           right: -1px;
           width: 100%;
           height: inherit;
           border-radius: inherit;
-          background-color: #3b2954;
-          transform: translateY(-12px);
+          background-color: #fdac03;
+          transform: translateY(-10px);
           transition-duration: 125ms;
-          transition-delay: 125ms;
-          border: 1px solid #180f25;
+          transition: transform .6s ease;
+          border: 1px solid #825403;
+          z-index: -1;
+          box-shadow: inset 0px 0px 20px #382500;
+        }
+        &:active, &.-active {
+          box-shadow: 0 2px 7px 0px rgba(0, 0, 31, .5);
+          color: rgba(255, 255, 255, 0.8);
+          .fa {
+            transform: translate(0px, -2px);
+            transition: transform 0.6s ease;
+          }
+          &:after {
+            transform: translateY(-6px);
+            transition: transform 0.6s ease;
+          }
         }
         &--play {
           background: #441111;
@@ -295,14 +483,12 @@
           &:after {
             background: #731010;
           }
-          &.-played {
-            box-shadow: 0 2px 7px 0px rgba(0,0,31,.5);
-            &:after {
-              transform: translateY(-6px);
-            }
-          }
         }
       }
+    }
+    &__canvas {
+      border: 1px solid black;
+      margin-top: 10px;
     }
   }
 </style>

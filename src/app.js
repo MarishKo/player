@@ -5,6 +5,11 @@ import Vuex from 'vuex';
 Vue.use(VueRouter);
 Vue.use(Vuex);
 
+//Global components import
+import IconComponent from '@js/components/ui/icon.vue';
+
+Vue.component('icon', IconComponent);
+
 import { AppRouter } from '@js/router.js';
 import AppStore from '@js/store.js';
 
