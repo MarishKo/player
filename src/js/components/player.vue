@@ -7,11 +7,14 @@
         </div>
 
         <div class="song__disk_bg" :class="{'-played': controls.playState}">
-          <img class="song__img" :src="song.current.bg" :alt="song.current.title">
+          <div class="song__img--wrapp">
+            <img class="song__img" :src="song.current.bg" :alt="song.current.title">
+          </div>
+          <span class="song__time">{{songTime}}</span>
         </div>
       </div>
 
-      <canvas id="song__canvas" class="song__canvas" width="400" height="80"></canvas>
+      <canvas id="song__canvas" class="song__canvas" width="446" height="100"></canvas>
 
       <div class="song__controls">
         <div class="song__controls_rivets">
@@ -21,10 +24,14 @@
           <div class="song__controls_rivets_item song__controls_rivets_item--bottom"></div>
         </div>
         <div class="song__controls--wrapp">
-          <button class="song__controls_btn song__controls_btn--prev" type="button">
+          <button class="song__controls_btn song__controls_btn--prev"
+                  @click="onPrevSongClick"
+                  type="button">
             <i class="fa fa-fast-backward"></i>
           </button>
-          <button class="song__controls_btn song__controls_btn--next" type="button">
+          <button class="song__controls_btn song__controls_btn--next"
+                  @click="onNextSongClick"
+                  type="button">
             <i class="fa fa-fast-forward"></i>
           </button>
           <button class="song__controls_btn song__controls_btn--ab"
@@ -47,9 +54,9 @@
 </template>
 <script>
   const svgNS = "http://www.w3.org/2000/svg";
-  const r = 180;
+  const r = 80;
   const circleLength = 2 * Math.PI * r;
-  const timelineLength = 360;
+  const timelineLength = 160;
 
   export default {
     name: 'player',
@@ -80,6 +87,9 @@
       },
     },
     methods: {
+      /**
+       * Задаем размеры svg с progress-bar
+       */
       setSVGParams() {
         let svgContainer = document.getElementById("mySVG");
         if (svgContainer !== null) {
@@ -87,36 +97,51 @@
           svgContainer.style.height = `${r * 2 + 4}px`;
         }
       },
-      setAudioDuration() {
+      /**
+       * создаём AudioContext для получения данных о песне, и для визуализации
+       */
+      initAudioContext() {
+        this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        this.analyser = this.audioCtx.createAnalyser();
+        this.analyser.minDecibels = -90;
+        this.analyser.maxDecibels = -10;
+        this.analyser.smoothingTimeConstant = 0.85;
+        this.analyser.fftSize = 256;
+        this.jsNode = this.audioCtx.createScriptProcessor(1024, 1, 1);
+        this.analyser.connect(this.jsNode);
+        this.jsNode.connect(this.audioCtx.destination);
+      },
+      /**
+       * Создаём сам медиа элемент
+       */
+      createMediaElementSource(audio) {
+        this.sourceNode = this.audioCtx.createMediaElementSource(audio);
+        this.sourceNode.connect(this.analyser);
+        this.sourceNode.connect(this.audioCtx.destination);
+      },
+      /**
+       * Инициализация текущей песни
+       */
+      initCurrentAudio() {
         new Promise((resolve, reject) => {
           this.audio.src = this.song.current.url;
           this.audio.onloadedmetadata = e => resolve(this.audio);
         }).then(audio => {
           this.$store.commit('setCurrentSong', {duration: audio.duration});
+
+          if (this.sourceNode === null) {
+            this.createMediaElementSource(audio);
+          }
+
+          this.audio.addEventListener('ended', this.onEndedMusic);
           this.createCircle();
         });
-
-
       },
+      /**
+       * Отрисовка аудио-процесса
+       */
       drawAudioProcess() {
-        this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        this.analyser = this.audioCtx.createAnalyser();
-
-        this.analyser.minDecibels = -90;
-        this.analyser.maxDecibels = -10;
-        this.analyser.smoothingTimeConstant = 0.85;
-        this.analyser.fftSize = 256;
-
-        this.jsNode = this.audioCtx.createScriptProcessor(1024, 1, 1);
-        this.sourceNode = this.audioCtx.createMediaElementSource(this.audio);
-        this.sourceNode.connect(this.analyser);
-        this.analyser.connect(this.jsNode);
-        this.jsNode.connect(this.audioCtx.destination);
-        this.sourceNode.connect(this.audioCtx.destination);
-        this.jsNode.onaudioprocess = function () {
-          drawAlt();
-        };
-
+        this.audioCtx.resume();
         let bufferLengthAlt = this.analyser.frequencyBinCount,
           dataArrayAlt = new Uint8Array(bufferLengthAlt),
           canvas = document.getElementById('song__canvas'),
@@ -145,32 +170,51 @@
 
             x += barWidth + 1;
           }
+          this.changePlayingTime();
         };
+        drawAlt();
       },
+      /**
+       * Переключение паузы и проигрывания песни
+       */
       playOrPauseSong() {
         if (this.controls.playState) {
-          this.audio.pause();
-          this.stopAndClearSongProcessAnimation();
+          this.pauseSong();
         } else {
-          this.audio.play();
-          this.audio.addEventListener('ended', this.onEndedMusic);
-          this.createSVGCircle();
-          this.drawAudioProcess();
+          this.playSong();
         }
-        this.$store.commit('setSongPlayState', !this.controls.playState);
       },
+      /**
+       * Проигрывание песни
+       */
+      playSong() {
+        this.audio.play();
+        this.createSVGCircle();
+        this.drawAudioProcess();
+        this.$store.commit('setSongPlayState', true);
+      },
+      /**
+       * Пауза
+       */
+      pauseSong() {
+        this.audio.pause();
+        this.stopAndClearSongProcessAnimation();
+        this.$store.commit('setSongPlayState', false);
+      },
+      /**
+       * После окончания песни отчищаем анимацию и обновляем состояние
+       */
       onEndedMusic() {
         this.$store.commit('setSongPlayState', false);
         this.stopAndClearSongProcessAnimation();
       },
+      /**
+       * отчищаем процесс и анимацию
+       */
       stopAndClearSongProcessAnimation() {
         if (this.drawVisual !== null) {
           window.cancelAnimationFrame(this.drawVisual);
-        }
-        if (this.sourceNode !== null) {console.log(2);
-        console.log(this.audioCtx);
-          this.sourceNode.disconnect();
-          this.sourceNode = null;
+          this.audioCtx.suspend();
         }
       },
       /**
@@ -269,6 +313,9 @@
           }
         });
       },
+      /**
+       * При клике на кнопку повторения отрезка песни
+       */
       onClickRepeat() {
         if (this.controls.repeat) {
 
@@ -277,10 +324,43 @@
         }
         this.$store.commit('setSongRepeatState', !this.controls.repeat);
       },
+      /**
+       * Переключение на следующую песню
+       */
+      onNextSongClick() {
+        let currentSongId = this.$store.state.songs.indexOf(this.$store.state.songs.filter(song => song.id === this.song.current.id)[0]);
+        if (currentSongId >= 0) {
+          this.changeCurrentSong(currentSongId < this.$store.state.songs.length - 1 ? this.$store.state.songs[currentSongId + 1] : this.$store.state.songs[0]);
+          this.initCurrentAudio();
+          this.playOrPauseSong();
+        }
+      },
+      /**
+       * Переключение на предыдущую песню
+       */
+      onPrevSongClick() {
+        let currentSongId = this.$store.state.songs.indexOf(this.$store.state.songs.filter(song => song.id === this.song.current.id)[0]);
+        if (currentSongId >= 0) {
+          this.changeCurrentSong(currentSongId - 1 < 0 ? this.$store.state.songs[this.$store.state.songs.length - 1] : this.$store.state.songs[currentSongId - 1]);
+          this.initCurrentAudio();
+          this.playOrPauseSong();
+        }
+      },
+      /**
+       * Изменение текущей песни
+       * @param song
+       */
+      changeCurrentSong(song) {
+        this.$store.commit('setCurrentSong', song);
+        this.initCurrentAudio();
+        this.$store.commit('setSongPlayState', !this.controls.playState);
+        this.stopAndClearSongProcessAnimation();
+      },
     },
     mounted() {
       this.setSVGParams();
-      this.setAudioDuration();
+      this.initAudioContext();
+      this.initCurrentAudio();
     }
   }
 </script>
@@ -299,7 +379,7 @@
       align-items: center;
       box-sizing: border-box;
       background: #3c2400;
-      margin: 50px;
+      margin: 100px;
       border-radius: 10px;
       position: relative;
       flex-direction: column;
@@ -316,10 +396,13 @@
       }
     }
     &__disk {
-      width: 364px;
-      height: 364px;
+      width: 164px;
+      height: 164px;
       border-radius: 50%;
-      position: relative;
+      position: absolute;
+      top: -50px;
+      left: -50px;
+      z-index: 1;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -335,7 +418,7 @@
         align-items: center;
         justify-content: center;
         &.-played {
-          animation: spinDisc 2s linear 0.3s infinite forwards;
+          //animation: spinDisc 2s linear 0.3s infinite forwards;
         }
       }
       @keyframes spinDisc {
@@ -353,11 +436,22 @@
       left: 0px;
     }
     &__img {
-      position: absolute;
-      max-width: 140px;
+      min-width: 100px;
+      min-height: 100px;
+      max-width: 160px;
       border-radius: 50%;
-      opacity: .8;
-      border: 20px solid #ffffff;
+      opacity: .4;
+      flex: 0 0 auto;
+      &--wrapp {
+        position: absolute;
+        width: 100px;
+        height: 100px;
+        overflow: hidden;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        border-radius: 50%;
+      }
     }
     &__controls {
       padding: 20px;
