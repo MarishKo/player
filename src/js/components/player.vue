@@ -14,49 +14,44 @@
         </div>
       </div>
 
-      <canvas id="song__canvas" class="song__canvas" width="446" height="100"></canvas>
+      <div class="song__visual">
+        <canvas id="song__canvas" class="song__canvas" width="350" height="120"></canvas>
+        <div class="song__progress">
+          <div class="song__progress_fill"
+               :style="{width: trackLineWidth + 'px'}"></div>
+        </div>
+      </div>
 
       <div class="song__controls">
-        <div class="song__controls_rivets">
-          <div class="song__controls_rivets_item song__controls_rivets_item--left"></div>
-          <div class="song__controls_rivets_item song__controls_rivets_item--top"></div>
-          <div class="song__controls_rivets_item song__controls_rivets_item--right"></div>
-          <div class="song__controls_rivets_item song__controls_rivets_item--bottom"></div>
-        </div>
-        <div class="song__controls--wrapp">
-          <button class="song__controls_btn song__controls_btn--prev"
-                  @click="onPrevSongClick"
-                  type="button">
-            <i class="fa fa-fast-backward"></i>
-          </button>
-          <button class="song__controls_btn song__controls_btn--next"
-                  @click="onNextSongClick"
-                  type="button">
-            <i class="fa fa-fast-forward"></i>
-          </button>
-          <button class="song__controls_btn song__controls_btn--ab"
-                  type="button"
-                  :class="{'-active': controls.repeat}"
-                  @click="onClickRepeat">
-            <i class="fa fa-repeat"></i>
-          </button>
-          <button class="song__controls_btn song__controls_btn--play"
-                  :class="{'-active': controls.playState}"
-                  type="button"
-                  @click="playOrPauseSong">
-            <i v-if="controls.playState" class="fa fa-pause"></i>
-            <i v-else class="fa fa-play"></i>
-          </button>
-        </div>
+        <button class="song__controls_btn song__controls_btn--prev"
+                @click="onPrevSongClick"
+                type="button">
+          <i class="fa fa-fast-backward"></i>
+        </button>
+        <button class="song__controls_btn song__controls_btn--play"
+                :class="{'-active': controls.playState}"
+                type="button"
+                @click="playOrPauseSong">
+          <i v-if="controls.playState" class="fa fa-pause"></i>
+          <i v-else class="fa fa-play"></i>
+        </button>
+        <button class="song__controls_btn song__controls_btn--next"
+                @click="onNextSongClick"
+                type="button">
+          <i class="fa fa-fast-forward"></i>
+        </button>
+        <button class="song__controls_btn song__controls_btn--ab"
+                type="button"
+                :class="{'-active': controls.repeat}">
+          <i class="fa">A/B</i>
+        </button>
       </div>
     </div>
   </div>
 </template>
 <script>
-  const svgNS = "http://www.w3.org/2000/svg";
   const r = 80;
-  const circleLength = 2 * Math.PI * r;
-  const timelineLength = 160;
+  const trackWidth = 350;
 
   export default {
     name: 'player',
@@ -66,16 +61,7 @@
         drawVisual: null,
         sourceNode: null,
         songTime: '',
-        flags: {
-          one: {
-            left: 174,
-            top: -8,
-          },
-          two: {
-            left: 178,
-            top: -8,
-          }
-        }
+        trackLineWidth: 0,
       }
     },
     computed: {
@@ -133,8 +119,10 @@
             this.createMediaElementSource(audio);
           }
 
+          this.trackLineWidth = 0;
+          this.songTime = '';
+
           this.audio.addEventListener('ended', this.onEndedMusic);
-          this.createCircle();
         });
       },
       /**
@@ -170,7 +158,7 @@
 
             x += barWidth + 1;
           }
-          this.changePlayingTime();
+          this.fillProgress();
         };
         drawAlt();
       },
@@ -189,7 +177,6 @@
        */
       playSong() {
         this.audio.play();
-        this.createSVGCircle();
         this.drawAudioProcess();
         this.$store.commit('setSongPlayState', true);
       },
@@ -218,53 +205,6 @@
         }
       },
       /**
-       * создание круга timeline песни
-       */
-      createCircle() {
-        let svgCircle = document.createElementNS(svgNS, "circle");
-        svgCircle.setAttributeNS(null, "id", "timecircle");
-        svgCircle.setAttributeNS(null, "r", r);
-        svgCircle.setAttributeNS(null, "cx", r + 2);
-        svgCircle.setAttributeNS(null, "cy", r + 2);
-        svgCircle.setAttributeNS(null, "fill", "none");
-        svgCircle.setAttributeNS(null, "stroke", "#ffffff");
-        svgCircle.setAttributeNS(null, "stroke-width", "2");
-        document.getElementById("mySVG").appendChild(svgCircle);
-        this.onClickTimeline(svgCircle);
-      },
-      /**
-       * создание круга progress-bar
-       */
-      createSVGCircle() {
-        let myCircleFill = document.createElementNS(svgNS, "path");
-        myCircleFill.setAttributeNS(null, "id", "progress-bar");
-        myCircleFill.setAttributeNS(null, "cx", r + 2);
-        myCircleFill.setAttributeNS(null, "cy", r + 2);
-        myCircleFill.setAttributeNS(null, "r", r);
-        myCircleFill.setAttributeNS(null, "fill", "none");
-        myCircleFill.setAttributeNS(null, "stroke", "#ffffff");
-        myCircleFill.setAttributeNS(null, "stroke-width", "5");
-        myCircleFill.setAttribute("d", `M ${r + 2},${r + 2} m 0,-${r} a ${r},${r} 0 1 1 0,${r * 2} a ${r},${r} 0 1 1 0,-${r * 2}`);
-        myCircleFill.setAttribute('stroke-dashoffset', circleLength);
-        myCircleFill.setAttribute('stroke-dasharray', circleLength + ',' + circleLength);
-        document.getElementById("mySVG").appendChild(myCircleFill);
-        //this.onClickTimeline(myCircleFill);
-        this.trackLine = myCircleFill;
-        //requestAnimationFrame(() => this.getFill());
-      },
-      /**
-       * заполнение круга progress-bar
-       */
-      getFill() {
-        let currentTime = Number(this.audio.currentTime.toFixed(3)),
-          step = currentTime * circleLength / this.audio.duration;
-        this.trackLine.setAttribute('stroke-dashoffset', circleLength - step);
-        this.changePlayingTime();
-        if (currentTime <= this.audio.duration) {
-          requestAnimationFrame(() => this.getFill());
-        }
-      },
-      /**
        * изменение времени проигрывания аудио в блоке плеера
        */
       changePlayingTime() {
@@ -275,54 +215,6 @@
           seconds = '0' + seconds;
         }
         this.songTime = `${minutes}:${seconds}`;
-      },
-      /**
-       * клик по timeline
-       * @param elem
-       */
-      onClickTimeline(elem) {
-        let _this = this;
-        elem.addEventListener('click', (event) => {
-          /**
-           * (182, 0) -точка отсчета
-           * находим длину отрезка
-           * @type {number}
-           */
-          let a = Math.sqrt(Math.pow((r + 2 - event.offsetX), 2) + Math.pow((0 - event.offsetY), 2));
-          /**
-           * потом находим угол в градусах
-           * @type {number}
-           */
-          let Alpha = Math.acos(((2 * Math.pow(r, 2)) - Math.pow(a, 2)) / (2 * r * r)) * 180 / Math.PI;
-          if (event.offsetX < r + 2) {
-            Alpha = timelineLength - Alpha;
-          }
-          /**
-           * находим длину дуги
-           * @type {number}
-           */
-          let L = Math.PI * r * Alpha / 180;
-          /**
-           * вычисляем время проигрывания песни, на которое кликнули
-           * @type {number}
-           */
-          let newTime = L * _this.audio.duration / circleLength;
-          if (this.controls.playState) {
-            this.audio.currentTime = newTime;
-            this.audio.play();
-          }
-        });
-      },
-      /**
-       * При клике на кнопку повторения отрезка песни
-       */
-      onClickRepeat() {
-        if (this.controls.repeat) {
-
-        } else {
-
-        }
-        this.$store.commit('setSongRepeatState', !this.controls.repeat);
       },
       /**
        * Переключение на следующую песню
@@ -356,6 +248,15 @@
         this.$store.commit('setSongPlayState', !this.controls.playState);
         this.stopAndClearSongProcessAnimation();
       },
+      fillProgress() {
+        let currentTime = Number(this.audio.currentTime.toFixed(3)),
+          step = currentTime * trackWidth / this.audio.duration;
+
+        if (currentTime <= this.audio.duration) {
+          this.trackLineWidth = step;
+          this.changePlayingTime();
+        }
+      },
     },
     mounted() {
       this.setSVGParams();
@@ -373,26 +274,27 @@
     height: 100%;
     background-size: cover;
     &__container {
-      padding: 50px;
-      display: inline-flex;
+      padding: 40px;
+      display: flex;
       justify-content: center;
-      align-items: center;
+      align-items: stretch;
       box-sizing: border-box;
-      background: #3c2400;
+      background: #000000;
       margin: 100px;
       border-radius: 10px;
       position: relative;
+      box-shadow: 1px 1px 8px 0 #18608a;
       flex-direction: column;
       &:after {
         content: '';
         position: absolute;
-        top: 20px;
-        bottom: 20px;
-        left: 20px;
-        right: 20px;
-        border: 2px solid #503704;
+        top: 15px;
+        bottom: 15px;
+        left: 15px;
+        right: 15px;
+        border: 2px solid #25405d;
         border-radius: 10px;
-        box-shadow: inset 1px 1px 8px 0 #000;;
+        box-shadow: inset 1px 1px 8px 0 #18608a;
       }
     }
     &__disk {
@@ -417,6 +319,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
+        border: 2px solid #545151;
         &.-played {
           //animation: spinDisc 2s linear 0.3s infinite forwards;
         }
@@ -454,135 +357,49 @@
       }
     }
     &__controls {
-      padding: 20px;
-      margin-top: 20px;
+      display: flex;
+      padding: 5px 0;
       position: relative;
-      &--wrapp {
-        width: 364px;
-        text-align: center;
-        background: #8f6002;
-        display: flex;
-        justify-content: center;
-        box-shadow: 4px 4px 0 #6d4601 inset;
-        border-left: 2px solid #906310;
-        border-top: 2px solid #906310;
-        padding: 20px 20px 15px;
-        position: relative;
-        border-radius: 10px;
-      }
-      &_rivets {
-        position: absolute;
-        background-color: #B1811D;
-        border-radius: 15px;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        box-shadow: 0px 0px 5px 0px rgba(0, 0, 0, 0.5);
-
-        &_item {
-          position: absolute;
-          top: 6px;
-          left: 8px;
-          background-color: #8f6002;
-          width: 16px;
-          border-radius: 50%;
-          height: 16px;
-          box-shadow: 1px 1px 0 #6d4601;
-          &--top {
-            left: auto;
-            right: 7px;
-          }
-          &--bottom {
-            top: auto;
-            bottom: 5px;
-          }
-          &--right {
-            left: auto;
-            top: auto;
-            right: 7px;
-            bottom: 5px;
-          }
-          &:after, &:before {
-            position: absolute;
-            content: '';
-            width: 1px;
-            height: 6px;
-            top: 5px;
-            left: 8px;
-            background-color: #482e00;
-          }
-          &:after {
-            transform: rotate(45deg);
-          }
-          &:before {
-            transform: rotate(-45deg);
-          }
-        }
-      }
+      justify-content: space-between;
+      margin-top: 20px;
       &_btn {
-        width: 50px;
         height: 50px;
-        border: 1px solid #6d4601;
-        border-radius: 50%;
+        border: 2px solid #25405d;
+        border-radius: 10px;
         font-size: 8px;
         cursor: pointer;
         padding: 0;
         margin: 0 10px 0 0;
-        box-shadow: 0 2px 6px rgba(0, 0, 31, .75);
         position: relative;
         box-sizing: border-box;
-        color: rgba(255, 255, 255, 0.5);
-        background: #6d4601;
+        color: rgba(255, 255, 255, 0.8);
+        background: transparent;
         outline: none;
         z-index: 1;
+        flex: 1 1 50px;
+        &:last-child {
+          margin-right: 0;
+        }
         .fa {
-          transform: translate(0px, -8px);
-          transition: transform 0.6s ease;
           font-size: 12px;
-          text-shadow: 1px 1px 8px black;
-        }
-        &:after {
-          content: "";
-          position: absolute;
-          top: 0;
-          left: -1px;
-          right: -1px;
-          width: 100%;
-          height: inherit;
-          border-radius: inherit;
-          background-color: #fdac03;
-          transform: translateY(-10px);
-          transition-duration: 125ms;
-          transition: transform .6s ease;
-          border: 1px solid #825403;
-          z-index: -1;
-          box-shadow: inset 0px 0px 20px #382500;
-        }
-        &:active, &.-active {
-          box-shadow: 0 2px 7px 0px rgba(0, 0, 31, .5);
-          color: rgba(255, 255, 255, 0.8);
-          .fa {
-            transform: translate(0px, -2px);
-            transition: transform 0.6s ease;
-          }
-          &:after {
-            transform: translateY(-6px);
-            transition: transform 0.6s ease;
-          }
-        }
-        &--play {
-          background: #441111;
-          margin-left: auto;
-          &:after {
-            background: #731010;
-          }
+          text-shadow: 1px 1px 8px #ffffff;
         }
       }
     }
+    &__visual {
+      border: 2px solid #545151;
+    }
+    &__progress {
+      height: 15px;
+      &_fill {
+        background: #25405d;
+        height: 100%;
+        width: 0;
+      }
+      border-top: 1px solid #545151;
+    }
     &__canvas {
-      border: 1px solid black;
-      margin-top: 10px;
+      background-color: #000;
     }
   }
 </style>
