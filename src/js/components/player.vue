@@ -2,10 +2,6 @@
   <div class="song">
     <div class="song__container">
       <div class="song__disk">
-        <div class="song__svg" ref="svgContainer">
-          <svg id="mySVG"></svg>
-        </div>
-
         <div class="song__disk_bg" :class="{'-played': controls.playState}">
           <div class="song__img--wrapp">
             <img class="song__img" :src="song.current.bg" :alt="song.current.title">
@@ -14,13 +10,7 @@
         </div>
       </div>
 
-      <div class="song__visual">
-        <canvas id="song__canvas" class="song__canvas" width="350" height="120"></canvas>
-        <div class="song__progress">
-          <div class="song__progress_fill"
-               :style="{width: trackLineWidth + 'px'}"></div>
-        </div>
-      </div>
+      <h2 class="song__title">{{song.current.title}}</h2>
 
       <div class="song__controls">
         <button class="song__controls_btn song__controls_btn--prev"
@@ -42,15 +32,37 @@
         </button>
         <button class="song__controls_btn song__controls_btn--ab"
                 type="button"
-                :class="{'-active': controls.repeat}">
+                @click="changeABState"
+                :class="{'-active': repeatABState === 2}">
           <i class="fa">A/B</i>
         </button>
+      </div>
+
+      <div class="song__visual">
+        <canvas id="song__canvas" class="song__canvas" width="350" height="120"></canvas>
+        <div class="song__progress">
+          <div class="song__progress_fill"
+               :style="{width: trackLineWidth + 'px'}"></div>
+          <div v-if="repeatABState !== 0" class="song__progress_flags">
+            <div v-show="repeatABState !== 0"
+                 :style="{left: flagAPosition + 'px'}"
+                 class="song__progress_flags_item song__progress_flags_item--a">
+              <i class="fa fa-flag"></i>
+              <span>A</span>
+            </div>
+            <div v-show="repeatABState === 2"
+                 :style="{left: flagBPosition + 'px'}"
+                 class="song__progress_flags_item song__progress_flags_item--b">
+              <i class="fa fa-flag"></i>
+              <span>B</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 <script>
-  const r = 80;
   const trackWidth = 350;
 
   export default {
@@ -62,6 +74,9 @@
         sourceNode: null,
         songTime: '',
         trackLineWidth: 0,
+        repeatABState: 0,
+        songStartTime: 0,
+        songEndTime: 0,
       }
     },
     computed: {
@@ -71,18 +86,14 @@
       controls() {
         return this.$store.state.controls;
       },
+      flagAPosition() {
+        return this.songStartTime !== 0 ? this.songStartTime * trackWidth / this.audio.duration : 0;
+      },
+      flagBPosition() {
+        return this.songEndTime !== 0 ? this.songEndTime * trackWidth / this.audio.duration : 0;
+      }
     },
     methods: {
-      /**
-       * Задаем размеры svg с progress-bar
-       */
-      setSVGParams() {
-        let svgContainer = document.getElementById("mySVG");
-        if (svgContainer !== null) {
-          svgContainer.style.width = `${r * 2 + 4}px`;
-          svgContainer.style.height = `${r * 2 + 4}px`;
-        }
-      },
       /**
        * создаём AudioContext для получения данных о песне, и для визуализации
        */
@@ -121,6 +132,8 @@
 
           this.trackLineWidth = 0;
           this.songTime = '';
+          this.songEndTime = audio.duration;
+          this.repeatABState = 0;
 
           this.audio.addEventListener('ended', this.onEndedMusic);
         });
@@ -138,8 +151,9 @@
         canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 
         let drawAlt = () => {
-          this.drawVisual = requestAnimationFrame(drawAlt);
+          this.checkSongTime();
 
+          this.drawVisual = requestAnimationFrame(drawAlt);
           this.analyser.getByteFrequencyData(dataArrayAlt);
 
           canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
@@ -153,7 +167,7 @@
             barHeight = dataArrayAlt[i];
 
             let hue = i / this.analyser.frequencyBinCount * 360;
-            canvasCtx.fillStyle = 'hsl(' + hue + ', 100%, 50%)';
+            canvasCtx.fillStyle = 'hsla(' + hue + ', 100%, 50%, 50%)';
             canvasCtx.fillRect(x, canvas.height - barHeight / 2, barWidth, barHeight / 2);
 
             x += barWidth + 1;
@@ -257,9 +271,50 @@
           this.changePlayingTime();
         }
       },
+      /**
+       * Применение режима повтора кусочка песни
+       * repeatAB state state 0-выключен, 1-выбор точки А, 2-выбор точки B
+       */
+      changeABState() {
+        switch (this.repeatABState) {
+          case 0:
+            this.songStartTime = this.audio.currentTime;
+            this.repeatABState = 1;
+            break;
+          case 1:
+            this.songEndTime = this.audio.currentTime;
+            this.repeatABState = 2;
+            this.playSong();
+            break;
+          case 2:
+            this.songStartTime = 0;
+            this.songEndTime = this.audio.duration;
+            this.repeatABState = 0;
+            break;
+        }
+      },
+      /**
+       * Проверка условий воспроизведени:
+       * повтор песен, повтор одной песни, режим a/b, рандомное переключение песен
+       */
+      checkSongTime() {
+        if (this.audio.currentTime >= this.songEndTime) {
+          if (this.repeatABState !== 0) {
+            //если включен режим A/B,
+            if (this.repeatABState === 2) {
+              //если выбран и флаг А и флаг В и песня доиграла до конца отрезка, то воспроизводим нужный отрезок заново
+              this.audio.currentTime = this.songStartTime;
+            } else {
+              //если был выбран только флаг A, но песня доиграла, то обнуляем выбор кнопки A/B
+              this.songStartTime = 0;
+              this.repeatABState = 0;
+              this.songEndTime = this.audio.duration;
+            }
+          }
+        }
+      },
     },
     mounted() {
-      this.setSVGParams();
       this.initAudioContext();
       this.initCurrentAudio();
     }
@@ -274,6 +329,7 @@
     height: 100%;
     background-size: cover;
     &__container {
+      min-width: 300px;
       padding: 40px;
       display: flex;
       justify-content: center;
@@ -298,8 +354,8 @@
       }
     }
     &__disk {
-      width: 164px;
-      height: 164px;
+      width: 90px;
+      height: 90px;
       border-radius: 50%;
       position: absolute;
       top: -50px;
@@ -333,22 +389,24 @@
         }
       }
     }
-    &__svg {
-      position: absolute;
-      top: 0px;
-      left: 0px;
+    &__title {
+      margin-top: 0;
+      margin-bottom: 10px;
+      font-size: 16px;
+      font-weight: 300;
+      color: rgba(white, 0.65);
     }
     &__img {
-      min-width: 100px;
-      min-height: 100px;
-      max-width: 160px;
+      min-width: 70px;
+      min-height: 70px;
+      max-width: 70px;
       border-radius: 50%;
       opacity: .4;
       flex: 0 0 auto;
       &--wrapp {
         position: absolute;
-        width: 100px;
-        height: 100px;
+        width: 90px;
+        height: 90px;
         overflow: hidden;
         display: flex;
         justify-content: center;
@@ -361,7 +419,7 @@
       padding: 5px 0;
       position: relative;
       justify-content: space-between;
-      margin-top: 20px;
+      margin-bottom: 10px;
       &_btn {
         height: 50px;
         border: 2px solid #25405d;
@@ -372,7 +430,7 @@
         margin: 0 10px 0 0;
         position: relative;
         box-sizing: border-box;
-        color: rgba(255, 255, 255, 0.8);
+        color: rgba(white, 0.8);
         background: transparent;
         outline: none;
         z-index: 1;
@@ -384,19 +442,48 @@
           font-size: 12px;
           text-shadow: 1px 1px 8px #ffffff;
         }
+        &.-active {
+          background-color: rgba(#25405d, 0.5);
+        }
       }
     }
     &__visual {
-      border: 2px solid #545151;
+      margin-top:10px;
     }
     &__progress {
       height: 15px;
+      width: 350px;
+      border: 2px solid #545151;
+      position: relative;
+      box-sizing: border-box;
+      border-radius: 2px;
+
       &_fill {
         background: #25405d;
         height: 100%;
         width: 0;
       }
-      border-top: 1px solid #545151;
+
+      &_flags {
+        &_item {
+          position: absolute;
+          bottom: 0px;
+          border-left: 1px solid rgba(white, 0.5);
+          i {
+            position: absolute;
+            left: -2px;
+            bottom: 100%;
+          }
+          span {
+            position: relative;
+            top: -20px;
+            color: black;
+            font-size: 9px;
+            left: 3px;
+            font-weight: bold;
+          }
+        }
+      }
     }
     &__canvas {
       background-color: #000;

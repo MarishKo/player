@@ -16,6 +16,7 @@
   body {
     min-height: 100vh;
     display: flex;
+    font-family: Arial, sans-serif;
   }
   .app {
     flex: 1;
