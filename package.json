@@ -34,7 +34,7 @@
     "cssnano": "^4.1.10",
     "fs": "0.0.1-security",
     "musicmetadata": "^2.0.5",
-    "node-sass": "^4.12.0",
+    "node-sass": "^4.13.1",
     "postcss-comment": "^2.0.0",
     "postcss-loader": "^3.0.0",
     "sass-loader": "^7.1.0",
